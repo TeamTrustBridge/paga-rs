@@ -8,7 +8,8 @@
 > documentation and Paga's disagree, Paga's is right.
 
 > **Documentation:** <https://teamtrustbridge.github.io/paga-rs-docs/> — the full
-> Rust API reference, organised like Paga's own documentation.
+> Rust API reference, organised like Paga's own documentation. Source:
+> [TeamTrustBridge/paga-rs-docs](https://github.com/TeamTrustBridge/paga-rs-docs).
 
 `paga-rs` makes the Paga developer workflow easy for page and integration
 developers building checkout and payment experiences. It wraps the Paga Engine
