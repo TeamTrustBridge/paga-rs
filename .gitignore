@@ -1,0 +1,9 @@
+target/
+dist/
+*.dll
+*.so
+*.dylib
+.env
+.env.*
+!.env.example
+.pypirc
