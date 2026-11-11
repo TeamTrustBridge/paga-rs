@@ -1,6 +1,9 @@
 //! A tiny HTTP mock server, so the tests can assert the exact requests the
 //! client makes without reaching the network.
 
+// Not every test binary uses every helper.
+#![allow(dead_code)]
+
 use std::sync::{Arc, Mutex};
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};

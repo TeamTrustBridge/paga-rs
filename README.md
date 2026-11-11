@@ -218,6 +218,30 @@ When the outcome is **unknown** — Paga's `-1`, `105` and `135`, a timeout or a
 504 — do not send again. Check the transaction status with the *original*
 reference number.
 
+## Module layout
+
+The operations are split into one module per section of Paga's documentation,
+under `paga::operations`:
+
+| Module | Documentation section |
+|---|---|
+| `operations::checkout` | Checkout |
+| `operations::collection` | Dynamic virtual account, Bank USSD, Paga wallet, USD bank transfer |
+| `operations::refunds` | Refunds |
+| `operations::direct_debit` | Direct Debit (Open Banking) |
+| `operations::money_transfer` | Money Transfer |
+| `operations::airtime` | Airtime and data |
+| `operations::bill_payment` | Bill payment (VAS) |
+| `operations::status` | Check the transaction status |
+| `operations::business` | Your business account |
+| `operations::subsidiary` | Subsidiary accounts |
+| `operations::persistent` | Persistent payment accounts |
+| `operations::customer` | Customer registration and KYC |
+
+`paga::client` holds the client struct and the HTTP plumbing; every module
+adds its operations as inherent methods on `PagaClient`, so the public API is
+one flat surface.
+
 ## License
 
 GPL-3.0 — see [LICENSE](LICENSE).

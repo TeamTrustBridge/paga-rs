@@ -6,6 +6,10 @@
 //!   `hash` header, and reports success in `statusCode` (the string `"0"`).
 //! - The **Business API** uses `principal` and `credentials` headers plus a
 //!   `hash` header, and reports success in `responseCode` (the integer `0`).
+//!
+//! This module holds the client itself and the HTTP plumbing. The operations
+//! live in [`crate::operations`], one module per section of Paga's
+//! documentation.
 
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue, AUTHORIZATION};
 use reqwest::multipart::{Form, Part};
@@ -16,8 +20,6 @@ use serde_json::Value;
 use crate::auth::*;
 use crate::codes::{classify, OperationOutcome};
 use crate::errors::{PagaAPIError, PagaAuthenticationError, PagaError, PagaErrorKind, PagaRateLimitError};
-use crate::requests::*;
-use crate::types::*;
 
 pub const DEFAULT_COLLECT_TEST_BASE_URL: &str = "https://beta-collect.paga.com";
 pub const DEFAULT_COLLECT_LIVE_BASE_URL: &str = "https://collect.paga.com";
@@ -175,16 +177,16 @@ impl RequestOptions {
 /// An async client for the Paga Engine API.
 #[derive(Debug, Clone)]
 pub struct PagaClient {
-    public_key: String,
-    secret_key: String,
-    hash_key: String,
-    environment: Environment,
-    base_url: String,
-    checkout_base_url: String,
-    business_base_url: String,
-    max_retries: u32,
-    retry_backoff_ms: u64,
-    client: Client,
+    pub(crate) public_key: String,
+    pub(crate) secret_key: String,
+    pub(crate) hash_key: String,
+    pub(crate) environment: Environment,
+    pub(crate) base_url: String,
+    pub(crate) checkout_base_url: String,
+    pub(crate) business_base_url: String,
+    pub(crate) max_retries: u32,
+    pub(crate) retry_backoff_ms: u64,
+    pub(crate) client: Client,
 }
 
 impl PagaClient {
@@ -270,7 +272,7 @@ impl PagaClient {
         &self.business_base_url
     }
 
-    fn basic_auth_value(&self) -> String {
+    pub(crate) fn basic_auth_value(&self) -> String {
         use base64::Engine;
         let raw = format!("{}:{}", self.public_key, self.secret_key);
         format!(
@@ -279,7 +281,7 @@ impl PagaClient {
         )
     }
 
-    fn build_headers(
+    pub(crate) fn build_headers(
         &self,
         signed: Option<&Value>,
         options: &RequestOptions,
@@ -330,7 +332,7 @@ impl PagaClient {
     }
 
     /// Send a JSON request to Paga.
-    async fn request<T: DeserializeOwned>(
+    pub(crate) async fn request<T: DeserializeOwned>(
         &self,
         method: Method,
         path: &str,
@@ -358,7 +360,7 @@ impl PagaClient {
     }
 
     /// Send a `multipart/form-data` request to Paga.
-    async fn request_multipart<T: DeserializeOwned>(
+    pub(crate) async fn request_multipart<T: DeserializeOwned>(
         &self,
         path: &str,
         form: Form,
@@ -385,7 +387,7 @@ impl PagaClient {
     /// Send a request, replaying rate-limited calls when enabled.
     ///
     /// A multipart body cannot be replayed, so such a request is sent once.
-    async fn send_with_retries(
+    pub(crate) async fn send_with_retries(
         &self,
         request: reqwest::RequestBuilder,
     ) -> Result<reqwest::Response, PagaError> {
@@ -425,7 +427,7 @@ impl PagaClient {
     }
 
     /// Turn a response into a parsed body, raising the right error type.
-    async fn finish<T: DeserializeOwned>(
+    pub(crate) async fn finish<T: DeserializeOwned>(
         &self,
         response: reqwest::Response,
         raise_on_error: bool,
@@ -466,970 +468,29 @@ impl PagaClient {
         serde_json::from_value(body)
             .map_err(|e| PagaError::new(format!("Failed to parse Paga response: {}", e)))
     }
-
-    // ----------------------------------------------------------------- //
-    // Checkout                                                           //
-    // ----------------------------------------------------------------- //
-
-    /// Create a payment request.
-    pub async fn create_payment(
-        &self,
-        request: CreatePayment,
-    ) -> Result<CollectPaymentRequestResponse, PagaError> {
-        let payload = request.to_payload();
-        self.request(
-            Method::POST,
-            "/paymentRequest",
-            Some(&payload),
-            RequestOptions::basic(PAYMENT_REQUEST_HASH_FIELDS),
-        )
-        .await
-    }
-
-    /// Check the status of a payment request.
-    pub async fn get_payment_status(
-        &self,
-        reference_number: &str,
-    ) -> Result<PaymentStatusResponse, PagaError> {
-        let payload = serde_json::json!({ "referenceNumber": reference_number });
-        self.request(
-            Method::POST,
-            "/status",
-            Some(&payload),
-            RequestOptions::basic(PAYMENT_STATUS_HASH_FIELDS),
-        )
-        .await
-    }
-
-    /// Verify a checkout charge.
-    ///
-    /// `status_code` `0` means paid, `2` means pending. The response is
-    /// returned rather than raised: a pending charge is a legitimate answer.
-    pub async fn verify_charge(
-        &self,
-        payment_reference: &str,
-        public_key: &str,
-        amount: f64,
-    ) -> Result<CheckoutVerifyChargeResponse, PagaError> {
-        let payload = serde_json::json!({
-            "paymentReference": payment_reference,
-            "publicKey": public_key,
-            "amount": amount,
-            "currency": "NGN",
-        });
-        let options = RequestOptions::basic_without_hash()
-            .base_url(self.checkout_base_url.clone())
-            .lenient();
-        self.request(
-            Method::POST,
-            "/checkout/transaction/verify",
-            Some(&payload),
-            options,
-        )
-        .await
-    }
-
-    /// Refund or cancel a payment request.
-    pub async fn refund_payment(
-        &self,
-        request: RefundPayment,
-    ) -> Result<RefundResponse, PagaError> {
-        let payload = request.to_payload();
-        self.request(
-            Method::POST,
-            "/refund/v2",
-            Some(&payload),
-            RequestOptions::basic(REFUND_HASH_FIELDS),
-        )
-        .await
-    }
-
-    // ----------------------------------------------------------------- //
-    // Actions                                                           //
-    // ----------------------------------------------------------------- //
-
-    /// Send money to a bank account or Paga wallet.
-    pub async fn send_money(&self, request: SendMoney) -> Result<DepositToBankResponse, PagaError> {
-        let payload = request.to_payload();
-        self.request(
-            Method::POST,
-            "/depositToBank",
-            Some(&payload),
-            RequestOptions::secured(MONEY_TRANSFER_HASH_FIELDS)
-                .base_url(self.business_base_url.clone())
-                .lenient(),
-        )
-        .await
-    }
-
-    /// Buy airtime or data.
-    pub async fn buy_airtime(&self, request: BuyAirtime) -> Result<PurchaseResponse, PagaError> {
-        let payload = request.to_payload();
-        self.request(
-            Method::POST,
-            "/airtimePurchase",
-            Some(&payload),
-            RequestOptions::secured(AIRTIME_HASH_FIELDS)
-                .base_url(self.business_base_url.clone())
-                .lenient(),
-        )
-        .await
-    }
-
-    /// Pay a bill from the business balance.
-    pub async fn pay_bill(&self, request: PayBill) -> Result<MerchantPaymentResponse, PagaError> {
-        let payload = request.to_payload();
-        self.request(
-            Method::POST,
-            "/merchantPayment",
-            Some(&payload),
-            RequestOptions::secured(BILL_PAYMENT_HASH_FIELDS)
-                .base_url(self.business_base_url.clone())
-                .lenient(),
-        )
-        .await
-    }
-
-    // ----------------------------------------------------------------- //
-    // Business account                                                  //
-    // ----------------------------------------------------------------- //
-
-    /// Check the business account balance.
-    pub async fn get_business_balance(
-        &self,
-        reference_number: &str,
-    ) -> Result<AccountBalanceResponse, PagaError> {
-        let payload = serde_json::json!({ "referenceNumber": reference_number });
-        self.request(
-            Method::POST,
-            "/accountBalance",
-            Some(&payload),
-            RequestOptions::secured(ACCOUNT_BALANCE_HASH_FIELDS)
-                .base_url(self.business_base_url.clone())
-                .lenient(),
-        )
-        .await
-    }
-
-    /// Get the business transaction history.
-    pub async fn get_business_transactions(
-        &self,
-        request: GetBusinessTransactions,
-    ) -> Result<TransactionHistoryResponse, PagaError> {
-        let payload = request.to_payload();
-        self.request(
-            Method::POST,
-            "/transactionHistory",
-            Some(&payload),
-            RequestOptions::secured(TRANSACTION_HISTORY_HASH_FIELDS)
-                .base_url(self.business_base_url.clone()),
-        )
-        .await
-    }
-
-    /// Get the five most recent transactions on the business account.
-    pub async fn get_recent_transactions(
-        &self,
-        request: GetRecentTransactions,
-    ) -> Result<RecentTransactionsResponse, PagaError> {
-        let payload = request.to_payload();
-        self.request(
-            Method::POST,
-            "/recentTransactionHistory",
-            Some(&payload),
-            RequestOptions::secured(RECENT_TRANSACTION_HISTORY_HASH_FIELDS)
-                .base_url(self.business_base_url.clone())
-                .lenient(),
-        )
-        .await
-    }
-
-    /// Check an operation's status.
-    pub async fn get_operation_status(
-        &self,
-        request: GetTransactionStatus,
-    ) -> Result<OperationStatusResponse, PagaError> {
-        let payload = request.to_payload();
-        self.request(
-            Method::POST,
-            "/getOperationStatus",
-            Some(&payload),
-            RequestOptions::secured(GET_OPERATION_STATUS_HASH_FIELDS)
-                .base_url(self.business_base_url.clone())
-                .lenient(),
-        )
-        .await
-    }
-
-    /// Onboard a merchant.
-    pub async fn onboard_merchant(
-        &self,
-        request: OnboardMerchant,
-    ) -> Result<OnboardMerchantResponse, PagaError> {
-        let payload = request.to_payload();
-        let hash_payload = request.to_hash_payload();
-        self.request(
-            Method::POST,
-            "/onboardMerchant",
-            Some(&payload),
-            RequestOptions::secured(ONBOARD_MERCHANT_HASH_FIELDS)
-                .base_url(self.business_base_url.clone())
-                .hash_payload(hash_payload)
-                .lenient(),
-        )
-        .await
-    }
-
-    /// Dispense cash against a customer's withdrawal code.
-    pub async fn dispense_cash(
-        &self,
-        request: DispenseCash,
-    ) -> Result<DispenseCashResponse, PagaError> {
-        let payload = request.to_payload();
-        self.request(
-            Method::POST,
-            "/dispenseCash",
-            Some(&payload),
-            RequestOptions::secured(DISPENSE_CASH_HASH_FIELDS)
-                .base_url(self.business_base_url.clone())
-                .lenient(),
-        )
-        .await
-    }
-
-    // ----------------------------------------------------------------- //
-    // Subsidiary accounts                                               //
-    // ----------------------------------------------------------------- //
-
-    /// Create a subsidiary account.
-    pub async fn create_subsidiary_account(
-        &self,
-        request: CreateSubsidiaryAccount,
-    ) -> Result<SubsidiaryAccountResponse, PagaError> {
-        let payload = request.to_payload();
-        self.request(
-            Method::POST,
-            "/subsidiary-accounts",
-            Some(&payload),
-            RequestOptions::basic(SUBSIDIARY_ACCOUNT_HASH_FIELDS),
-        )
-        .await
-    }
-
-    /// Charge a ledger-backed subsidiary account.
-    pub async fn charge_subsidiary_account(
-        &self,
-        request: ChargeSubsidiaryAccount,
-    ) -> Result<SubsidiaryMoneyResponse, PagaError> {
-        let payload = request.to_payload();
-        let path = format!(
-            "/subsidiary-accounts/{}/charge",
-            request.account_reference
-        );
-        self.request(
-            Method::POST,
-            &path,
-            Some(&payload),
-            RequestOptions::basic(SUBSIDIARY_CHARGE_HASH_FIELDS),
-        )
-        .await
-    }
-
-    /// Top up a ledger-backed subsidiary account.
-    pub async fn top_up_subsidiary_account(
-        &self,
-        request: TopUpSubsidiaryAccount,
-    ) -> Result<SubsidiaryMoneyResponse, PagaError> {
-        let payload = request.to_payload();
-        let path = format!("/subsidiary-accounts/{}/topup", request.account_reference);
-        self.request(
-            Method::POST,
-            &path,
-            Some(&payload),
-            RequestOptions::basic(SUBSIDIARY_TOPUP_HASH_FIELDS),
-        )
-        .await
-    }
-
-    /// Transfer money between two subsidiary accounts.
-    pub async fn transfer_between_subsidiary_accounts(
-        &self,
-        request: TransferBetweenSubsidiaryAccounts,
-    ) -> Result<SubsidiaryTransferResponse, PagaError> {
-        let payload = request.to_payload();
-        self.request(
-            Method::POST,
-            "/subsidiary-accounts/transfer",
-            Some(&payload),
-            RequestOptions::basic(SUBSIDIARY_TRANSFER_HASH_FIELDS),
-        )
-        .await
-    }
-
-    /// Retrieve a subsidiary account.
-    pub async fn retrieve_subsidiary_account(
-        &self,
-        account_reference: &str,
-        reference_number: &str,
-    ) -> Result<SubsidiaryAccountResponse, PagaError> {
-        let payload = serde_json::json!({
-            "referenceNumber": reference_number,
-            "accountIdentifier": account_reference,
-        });
-        let path = format!("/subsidiary-accounts/{}", account_reference);
-        self.request(
-            Method::GET,
-            &path,
-            Some(&payload),
-            RequestOptions::basic(SUBSIDIARY_RETRIEVE_HASH_FIELDS)
-                .base_url(self.base_url.clone())
-                .param("referenceNumber", reference_number),
-        )
-        .await
-    }
-
-    /// Update a subsidiary account.
-    pub async fn update_subsidiary_account(
-        &self,
-        request: UpdateSubsidiaryAccount,
-    ) -> Result<SubsidiaryAccountResponse, PagaError> {
-        let payload = request.to_payload();
-        let path = format!("/subsidiary-accounts/{}", request.account_reference);
-        self.request(
-            Method::PUT,
-            &path,
-            Some(&payload),
-            RequestOptions::basic(SUBSIDIARY_UPDATE_HASH_FIELDS),
-        )
-        .await
-    }
-
-    /// Get a subsidiary account balance.
-    pub async fn get_subsidiary_balance(
-        &self,
-        account_reference: &str,
-        reference_number: &str,
-    ) -> Result<SubsidiaryBalanceResponse, PagaError> {
-        let payload = serde_json::json!({
-            "referenceNumber": reference_number,
-            "accountIdentifier": account_reference,
-        });
-        let path = format!("/subsidiary-accounts/{}/balance", account_reference);
-        self.request(
-            Method::GET,
-            &path,
-            Some(&payload),
-            RequestOptions::basic(SUBSIDIARY_BALANCE_HASH_FIELDS)
-                .base_url(self.base_url.clone())
-                .param("referenceNumber", reference_number),
-        )
-        .await
-    }
-
-    /// Get a subsidiary account transaction history.
-    pub async fn get_subsidiary_history(
-        &self,
-        request: GetSubsidiaryHistory,
-    ) -> Result<SubsidiaryHistoryResponse, PagaError> {
-        let payload = request.to_payload();
-        let path = format!(
-            "/subsidiary-accounts/{}/history",
-            request.account_reference
-        );
-        self.request(
-            Method::GET,
-            &path,
-            Some(&payload),
-            RequestOptions::basic(SUBSIDIARY_HISTORY_HASH_FIELDS)
-                .base_url(self.base_url.clone())
-                .param("referenceNumber", request.reference_number.clone())
-                .param("startDateTimeUTC", request.start_date_time_utc.clone())
-                .param("endDateTimeUTC", request.end_date_time_utc.clone())
-                .param("pageSize", request.page_size.unwrap_or(20).to_string())
-                .param("pageNumber", request.page_number.unwrap_or(0).to_string()),
-        )
-        .await
-    }
-
-    // ----------------------------------------------------------------- //
-    // Directory lookups                                                 //
-    // ----------------------------------------------------------------- //
-
-    /// List the banks a customer can pay from.
-    pub async fn get_collect_banks(
-        &self,
-        reference_number: &str,
-    ) -> Result<CollectBanksResponse, PagaError> {
-        let payload = serde_json::json!({ "referenceNumber": reference_number });
-        self.request(
-            Method::POST,
-            "/banks",
-            Some(&payload),
-            RequestOptions::basic(COLLECT_BANKS_HASH_FIELDS).lenient(),
-        )
-        .await
-    }
-
-    /// List every institution you can pay.
-    pub async fn get_banks(&self, reference_number: &str) -> Result<BanksResponse, PagaError> {
-        let payload = serde_json::json!({ "referenceNumber": reference_number });
-        self.request(
-            Method::POST,
-            "/getBanks",
-            Some(&payload),
-            RequestOptions::secured(BANKS_HASH_FIELDS)
-                .base_url(self.business_base_url.clone())
-                .lenient(),
-        )
-        .await
-    }
-
-    /// Validate a destination bank account.
-    pub async fn validate_deposit_to_bank(
-        &self,
-        request: ValidateDepositToBank,
-    ) -> Result<ValidateDepositToBankResponse, PagaError> {
-        let payload = request.to_payload();
-        self.request(
-            Method::POST,
-            "/validateDepositToBank",
-            Some(&payload),
-            RequestOptions::secured(VALIDATE_DEPOSIT_TO_BANK_HASH_FIELDS)
-                .base_url(self.business_base_url.clone())
-                .lenient(),
-        )
-        .await
-    }
-
-    /// List the mobile networks you can top up.
-    pub async fn get_mobile_operators(
-        &self,
-        reference_number: &str,
-        locale: Option<&str>,
-    ) -> Result<MobileOperatorsResponse, PagaError> {
-        let mut payload = serde_json::Map::new();
-        payload.insert("referenceNumber".into(), serde_json::json!(reference_number));
-        if let Some(locale) = locale {
-            payload.insert("locale".into(), serde_json::json!(locale));
-        }
-        self.request(
-            Method::POST,
-            "/getMobileOperators",
-            Some(&Value::Object(payload)),
-            RequestOptions::secured(MOBILE_OPERATORS_HASH_FIELDS)
-                .base_url(self.business_base_url.clone())
-                .lenient(),
-        )
-        .await
-    }
-
-    /// List a network's data bundles.
-    pub async fn get_data_bundles(
-        &self,
-        reference_number: &str,
-        operator_public_id: &str,
-    ) -> Result<DataBundlesResponse, PagaError> {
-        let payload = serde_json::json!({
-            "referenceNumber": reference_number,
-            "operatorPublicId": operator_public_id,
-        });
-        self.request(
-            Method::POST,
-            "/getDataBundleByOperator",
-            Some(&payload),
-            RequestOptions::secured(DATA_BUNDLE_HASH_FIELDS)
-                .base_url(self.business_base_url.clone())
-                .lenient(),
-        )
-        .await
-    }
-
-    /// List every biller you can pay.
-    pub async fn get_merchants(&self, reference_number: &str) -> Result<MerchantsResponse, PagaError> {
-        let payload = serde_json::json!({ "referenceNumber": reference_number });
-        self.request(
-            Method::POST,
-            "/getMerchants",
-            Some(&payload),
-            RequestOptions::secured(MERCHANTS_HASH_FIELDS)
-                .base_url(self.business_base_url.clone())
-                .lenient(),
-        )
-        .await
-    }
-
-    /// List what a biller can be paid for.
-    pub async fn get_merchant_services(
-        &self,
-        reference_number: &str,
-        merchant_public_id: &str,
-    ) -> Result<MerchantServicesResponse, PagaError> {
-        let payload = serde_json::json!({
-            "referenceNumber": reference_number,
-            "merchantPublicId": merchant_public_id,
-        });
-        self.request(
-            Method::POST,
-            "/getMerchantServices",
-            Some(&payload),
-            RequestOptions::secured(MERCHANT_SERVICES_HASH_FIELDS)
-                .base_url(self.business_base_url.clone())
-                .lenient(),
-        )
-        .await
-    }
-
-    /// Validate a customer's meter, smart card or account number.
-    ///
-    /// `merchant_service_product_code` takes part in the hash even when the
-    /// customer chose no service.
-    pub async fn get_merchant_account_details(
-        &self,
-        reference_number: &str,
-        merchant_account: &str,
-        merchant_reference_number: &str,
-        merchant_service_product_code: Option<&str>,
-    ) -> Result<MerchantAccountDetailsResponse, PagaError> {
-        let payload = serde_json::json!({
-            "referenceNumber": reference_number,
-            "merchantAccount": merchant_account,
-            "merchantReferenceNumber": merchant_reference_number,
-            "merchantServiceProductCode": merchant_service_product_code.unwrap_or(""),
-        });
-        self.request(
-            Method::POST,
-            "/getMerchantAccountDetails",
-            Some(&payload),
-            RequestOptions::secured(MERCHANT_ACCOUNT_DETAILS_HASH_FIELDS)
-                .base_url(self.business_base_url.clone())
-                .lenient(),
-        )
-        .await
-    }
-
-    /// Check what happened to a transaction you already sent.
-    pub async fn get_transaction_status(
-        &self,
-        request: GetTransactionStatus,
-    ) -> Result<TransactionStatusResponse, PagaError> {
-        let payload = request.to_payload();
-        self.request(
-            Method::POST,
-            "/transactionStatus",
-            Some(&payload),
-            RequestOptions::secured(TRANSACTION_STATUS_HASH_FIELDS)
-                .base_url(self.business_base_url.clone())
-                .lenient(),
-        )
-        .await
-    }
-
-    /// Check whether a payment request was refunded.
-    pub async fn get_refund_status(
-        &self,
-        reference_number: &str,
-    ) -> Result<RefundStatusResponse, PagaError> {
-        let payload = serde_json::json!({ "referenceNumber": reference_number });
-        self.request(
-            Method::POST,
-            "/status",
-            Some(&payload),
-            RequestOptions::basic(PAYMENT_STATUS_HASH_FIELDS).lenient(),
-        )
-        .await
-    }
-
-    /// Check the status of a USD (ACH, Wire, Swift) payment request.
-    pub async fn get_usd_payment_status(
-        &self,
-        reference_number: &str,
-        payment_currency: &str,
-    ) -> Result<PagaResponse, PagaError> {
-        let payload = serde_json::json!({
-            "referenceNumber": reference_number,
-            "paymentCurrency": payment_currency,
-        });
-        self.request(
-            Method::POST,
-            "/status",
-            Some(&payload),
-            RequestOptions::basic(USD_PAYMENT_STATUS_HASH_FIELDS).lenient(),
-        )
-        .await
-    }
-
-    // ----------------------------------------------------------------- //
-    // Direct Debit                                                      //
-    // ----------------------------------------------------------------- //
-
-    /// Start a hosted Direct Debit set-up session.
-    ///
-    /// This endpoint uses HTTP Basic only — it sends no `hash` header.
-    pub async fn start_direct_debit_session(
-        &self,
-        request: StartDirectDebitSession,
-    ) -> Result<DirectDebitSessionResponse, PagaError> {
-        let payload = request.to_payload();
-        let options = RequestOptions::basic_without_hash()
-            .base_url(self.checkout_base_url.clone())
-            .lenient();
-        self.request(
-            Method::POST,
-            "/checkout/charge-process/start",
-            Some(&payload),
-            options,
-        )
-        .await
-    }
-
-    /// Set up a Direct Debit mandate by API.
-    pub async fn create_direct_debit_mandate(
-        &self,
-        request: CreateDirectDebitMandate,
-    ) -> Result<PagaResponse, PagaError> {
-        let payload = request.to_payload();
-        self.request(
-            Method::POST,
-            "/paymentRequest",
-            Some(&payload),
-            RequestOptions::basic(PAYMENT_REQUEST_HASH_FIELDS),
-        )
-        .await
-    }
-
-    /// Check a mandate's status.
-    pub async fn get_mandate_status(
-        &self,
-        reference_number: &str,
-    ) -> Result<MandateStatusResponse, PagaError> {
-        let payload = serde_json::json!({ "referenceNumber": reference_number });
-        self.request(
-            Method::POST,
-            "/status",
-            Some(&payload),
-            RequestOptions::basic(MANDATE_STATUS_HASH_FIELDS).lenient(),
-        )
-        .await
-    }
-
-    /// Charge an approved Direct Debit mandate.
-    pub async fn charge_mandate(
-        &self,
-        request: ChargeMandate,
-    ) -> Result<ChargeMandateResponse, PagaError> {
-        let payload = request.to_payload();
-        self.request(
-            Method::POST,
-            "/chargeDebitMandate",
-            Some(&payload),
-            RequestOptions::basic(CHARGE_MANDATE_HASH_FIELDS),
-        )
-        .await
-    }
-
-    /// Check a mandate charge's status.
-    pub async fn get_charge_mandate_status(
-        &self,
-        reference_number: &str,
-    ) -> Result<ChargeMandateStatusResponse, PagaError> {
-        let payload = serde_json::json!({ "referenceNumber": reference_number });
-        self.request(
-            Method::POST,
-            "/getChargeMandateStatus",
-            Some(&payload),
-            RequestOptions::basic(CHARGE_MANDATE_STATUS_HASH_FIELDS).lenient(),
-        )
-        .await
-    }
-
-    /// Disable a Direct Debit mandate.
-    pub async fn disable_mandate(
-        &self,
-        request: DisableMandate,
-    ) -> Result<DisableMandateResponse, PagaError> {
-        let payload = request.to_payload();
-        self.request(
-            Method::POST,
-            "/disableMandate",
-            Some(&payload),
-            RequestOptions::basic(DISABLE_MANDATE_HASH_FIELDS),
-        )
-        .await
-    }
-
-    // ----------------------------------------------------------------- //
-    // Persistent payment accounts                                       //
-    // ----------------------------------------------------------------- //
-
-    /// Register a persistent payment account.
-    pub async fn register_persistent_payment_account(
-        &self,
-        request: RegisterPersistentPaymentAccount,
-    ) -> Result<PersistentPaymentAccountResponse, PagaError> {
-        let payload = request.to_payload();
-        self.request(
-            Method::POST,
-            "/registerPersistentPaymentAccount",
-            Some(&payload),
-            RequestOptions::basic(REGISTER_PERSISTENT_ACCOUNT_HASH_FIELDS),
-        )
-        .await
-    }
-
-    /// Delete a persistent payment account.
-    pub async fn delete_persistent_payment_account(
-        &self,
-        reference_number: &str,
-        account_identifier: &str,
-    ) -> Result<PagaResponse, PagaError> {
-        let payload = serde_json::json!({
-            "referenceNumber": reference_number,
-            "accountIdentifier": account_identifier,
-        });
-        self.request(
-            Method::POST,
-            "/deletePersistentPaymentAccount",
-            Some(&payload),
-            RequestOptions::basic(DELETE_PERSISTENT_ACCOUNT_HASH_FIELDS),
-        )
-        .await
-    }
-
-    /// Update a persistent payment account.
-    pub async fn update_persistent_payment_account(
-        &self,
-        request: UpdatePersistentPaymentAccount,
-    ) -> Result<PersistentPaymentAccountResponse, PagaError> {
-        let payload = request.to_payload();
-        self.request(
-            Method::POST,
-            "/updatePersistentPaymentAccount",
-            Some(&payload),
-            RequestOptions::basic(UPDATE_PERSISTENT_ACCOUNT_HASH_FIELDS),
-        )
-        .await
-    }
-
-    /// Get a persistent payment account.
-    pub async fn get_persistent_payment_account(
-        &self,
-        reference_number: &str,
-        account_identifier: &str,
-    ) -> Result<PersistentPaymentAccountResponse, PagaError> {
-        let payload = serde_json::json!({
-            "referenceNumber": reference_number,
-            "accountIdentifier": account_identifier,
-        });
-        self.request(
-            Method::POST,
-            "/getPersistentPaymentAccount",
-            Some(&payload),
-            RequestOptions::basic(GET_PERSISTENT_ACCOUNT_HASH_FIELDS),
-        )
-        .await
-    }
-
-    /// Get the history of your payment requests.
-    pub async fn get_payment_request_history(
-        &self,
-        reference_number: &str,
-    ) -> Result<PagaResponse, PagaError> {
-        let payload = serde_json::json!({ "referenceNumber": reference_number });
-        self.request(
-            Method::POST,
-            "/history",
-            Some(&payload),
-            RequestOptions::basic(HISTORY_HASH_FIELDS).lenient(),
-        )
-        .await
-    }
-
-    // ----------------------------------------------------------------- //
-    // Customers                                                         //
-    // ----------------------------------------------------------------- //
-
-    /// Register a customer.
-    pub async fn register_customer(
-        &self,
-        request: RegisterCustomer,
-    ) -> Result<CustomerResponse, PagaError> {
-        let payload = request.to_payload();
-        self.request(
-            Method::POST,
-            "/registerCustomer",
-            Some(&payload),
-            RequestOptions::secured(CUSTOMER_HASH_FIELDS)
-                .base_url(self.business_base_url.clone()),
-        )
-        .await
-    }
-
-    /// Register a customer with KYC photographs.
-    pub async fn register_customer_with_kyc(
-        &self,
-        request: RegisterCustomerWithKyc,
-    ) -> Result<CustomerResponse, PagaError> {
-        let payload = request.to_payload();
-        let form = Form::new()
-            .part(
-                "customer",
-                part_text(payload.to_string(), "application/json")?,
-            )
-            .part(
-                "customerAccountPhoto",
-                part_bytes(request.customer_account_photo.clone(), "account-photo.jpg", "image/jpeg")?,
-            )
-            .part(
-                "customerIdPhoto",
-                part_bytes(request.customer_id_photo.clone(), "id-photo.jpg", "image/jpeg")?,
-            );
-        self.request_multipart(
-            "/registerCustomerWithKYC",
-            form,
-            Some(&payload),
-            CUSTOMER_HASH_FIELDS,
-            true,
-        )
-        .await
-    }
-
-    /// Upload a customer's account photograph.
-    pub async fn register_customer_account_photo(
-        &self,
-        request: RegisterCustomerAccountPhoto,
-    ) -> Result<CustomerResponse, PagaError> {
-        let payload = request.to_payload();
-        let form = Form::new()
-            .part(
-                "customer",
-                part_text(payload.to_string(), "application/json")?,
-            )
-            .part(
-                "customerAccountPhoto",
-                part_bytes(request.customer_account_photo.clone(), "account-photo.jpg", "image/jpeg")?,
-            );
-        self.request_multipart(
-            "/registerCustomerAccountPhoto",
-            form,
-            Some(&payload),
-            CUSTOMER_ACCOUNT_PHOTO_HASH_FIELDS,
-            true,
-        )
-        .await
-    }
-
-    /// Upload a customer's identification.
-    pub async fn register_customer_identification(
-        &self,
-        request: RegisterCustomerIdentification,
-    ) -> Result<CustomerResponse, PagaError> {
-        let payload = request.to_payload();
-        let form = Form::new()
-            .part(
-                "customer",
-                part_text(payload.to_string(), "application/json")?,
-            )
-            .part(
-                "customerIdPhoto",
-                part_bytes(request.customer_id_photo.clone(), "id-photo.jpg", "image/jpeg")?,
-            );
-        self.request_multipart(
-            "/registerCustomerIdentification",
-            form,
-            Some(&payload),
-            CUSTOMER_IDENTIFICATION_HASH_FIELDS,
-            true,
-        )
-        .await
-    }
-
-    // ----------------------------------------------------------------- //
-    // Extra Business operations                                         //
-    // ----------------------------------------------------------------- //
-
-    /// Send money to a Paga wallet.
-    pub async fn transfer_to_paga_wallet(
-        &self,
-        request: TransferToPagaWallet,
-    ) -> Result<MoneyTransferResponse, PagaError> {
-        let payload = request.to_payload();
-        self.request(
-            Method::POST,
-            "/moneyTransfer",
-            Some(&payload),
-            RequestOptions::secured(PAGA_WALLET_TRANSFER_HASH_FIELDS)
-                .base_url(self.business_base_url.clone())
-                .lenient(),
-        )
-        .await
-    }
-
-    /// Validate a Paga wallet transfer.
-    pub async fn validate_money_transfer(
-        &self,
-        request: ValidateMoneyTransfer,
-    ) -> Result<ValidateMoneyTransferResponse, PagaError> {
-        let payload = request.to_payload();
-        self.request(
-            Method::POST,
-            "/validateMoneyTransfer",
-            Some(&payload),
-            RequestOptions::secured(VALIDATE_MONEY_TRANSFER_HASH_FIELDS)
-                .base_url(self.business_base_url.clone())
-                .lenient(),
-        )
-        .await
-    }
-
-    /// Send up to 300 money transfers in one call.
-    pub async fn send_bulk_money_transfer(
-        &self,
-        request: SendBulkMoneyTransfer,
-    ) -> Result<BulkMoneyTransferResponse, PagaError> {
-        if request.items.is_empty() {
-            return Err(PagaError::new("items must not be empty"));
-        }
-        if request.items.len() > 300 {
-            return Err(PagaError::new(
-                "a bulk money transfer may contain at most 300 items",
-            ));
-        }
-        let payload = request.to_payload();
-        let hash_payload = request.to_hash_payload();
-        self.request(
-            Method::POST,
-            "/moneyTransferBulk",
-            Some(&payload),
-            RequestOptions::secured(MONEY_TRANSFER_BULK_HASH_FIELDS)
-                .base_url(self.business_base_url.clone())
-                .hash_payload(hash_payload)
-                .lenient(),
-        )
-        .await
-    }
 }
 
 /// Read a message off a response body.
-fn read_message(body: &Value) -> Option<String> {
+pub(crate) fn read_message(body: &Value) -> Option<String> {
     body.get("message")
         .and_then(|value| value.as_str())
         .map(|value| value.to_string())
 }
 
 /// Read a numeric code off a response body.
-fn read_number(body: Option<&Value>) -> Option<i64> {
+pub(crate) fn read_number(body: Option<&Value>) -> Option<i64> {
     body.and_then(|value| value.as_i64())
 }
 
 /// Build a multipart part, mapping reqwest's error into a Paga error.
-fn part_text(text: String, mime: &str) -> Result<Part, PagaError> {
+pub(crate) fn part_text(text: String, mime: &str) -> Result<Part, PagaError> {
     Part::text(text)
         .mime_str(mime)
         .map_err(|e| PagaError::new(format!("Failed to build a multipart part: {}", e)))
 }
 
 /// Build a multipart file part, mapping reqwest's error into a Paga error.
-fn part_bytes(bytes: Vec<u8>, file_name: &str, mime: &str) -> Result<Part, PagaError> {
+pub(crate) fn part_bytes(bytes: Vec<u8>, file_name: &str, mime: &str) -> Result<Part, PagaError> {
     Part::bytes(bytes)
         .file_name(file_name.to_string())
         .mime_str(mime)

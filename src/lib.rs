@@ -9,6 +9,7 @@ pub mod auth;
 pub mod client;
 pub mod codes;
 pub mod errors;
+pub mod operations;
 pub mod requests;
 pub mod types;
 pub mod webhooks;
