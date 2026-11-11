@@ -1,6 +1,6 @@
 //! Status code and outcome classification tests.
 
-use paga_rs::codes::{
+use paga::codes::{
     classify, is_unknown_outcome, resolve_business_code, resolve_collect_status,
     BusinessErrorCode, ChargeStatusCode, CollectStatusCode, MandateProcessStatus,
     MandateStatusCode, OperationOutcome,
