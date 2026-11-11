@@ -39,13 +39,19 @@ same organisation and track the same operation set.
 ## Installation
 
 ```bash
-cargo add paga
+cargo add paga-rs
+```
+
+The crate is published as `paga-rs`, so it is imported as `paga_rs`:
+
+```rust,no_run
+use paga_rs::{CreatePayment, PagaClient};
 ```
 
 ## Quick start
 
 ```rust,no_run
-use paga::{CreatePayment, PagaClient};
+use paga_rs::{CreatePayment, PagaClient};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -77,8 +83,8 @@ set by `new`; the optional ones are public, so they can be set with
 struct-update syntax:
 
 ```rust,no_run
-# use paga::{CreatePayment, PagaClient};
-# async fn run(client: PagaClient) -> Result<(), paga::PagaError> {
+# use paga_rs::{CreatePayment, PagaClient};
+# async fn run(client: PagaClient) -> Result<(), paga_rs::PagaError> {
 let request = CreatePayment::new("ORD-1", 50.0, "Bello", "0801234", "Payee");
 let request = CreatePayment {
     payer_email: Some("customer@example.com".to_string()),
@@ -148,7 +154,7 @@ client.create_payment(request).await?;
 ## Webhook verification
 
 ```rust,no_run
-use paga::webhooks;
+use paga_rs::webhooks;
 
 # let payload = serde_json::json!({});
 # let received_hash = "";
@@ -178,7 +184,7 @@ nothing to verify — parse it and de-duplicate on `referenceNumber` plus
 
 ```rust,no_run
 # let payload = serde_json::json!({});
-let webhook = paga::webhooks::parse_usd_payment_webhook(Some(&payload));
+let webhook = paga_rs::webhooks::parse_usd_payment_webhook(Some(&payload));
 if webhook.is_captured() {
     // fulfil
 }
@@ -187,12 +193,12 @@ if webhook.is_captured() {
 ## Error handling
 
 ```rust,no_run
-# use paga::PagaClient;
-# async fn run(client: PagaClient) -> Result<(), paga::PagaError> {
+# use paga_rs::PagaClient;
+# async fn run(client: PagaClient) -> Result<(), paga_rs::PagaError> {
 match client.get_banks("REF-1").await {
     Ok(banks) => { let _ = banks; }
-    Err(error) if error.kind == paga::PagaErrorKind::Authentication => { /* bad keys */ }
-    Err(error) if error.kind == paga::PagaErrorKind::RateLimit => { /* 429 */ }
+    Err(error) if error.kind == paga_rs::PagaErrorKind::Authentication => { /* bad keys */ }
+    Err(error) if error.kind == paga_rs::PagaErrorKind::RateLimit => { /* 429 */ }
     Err(error) => {
         // error.code, error.outcome, error.status_code, error.response_code
         let _ = error;
@@ -205,14 +211,14 @@ match client.get_banks("REF-1").await {
 A 200 response does not mean the money moved. Read the code in the body:
 
 ```rust,no_run
-# use paga::PagaClient;
-# async fn run(client: PagaClient) -> Result<(), paga::PagaError> {
+# use paga_rs::PagaClient;
+# async fn run(client: PagaClient) -> Result<(), paga_rs::PagaError> {
 let status = client
-    .get_transaction_status(paga::GetTransactionStatus::new("PAY-2026-0311"))
+    .get_transaction_status(paga_rs::GetTransactionStatus::new("PAY-2026-0311"))
     .await?;
 
 let body = serde_json::to_value(&status).unwrap();
-if paga::classify(Some(&body)) == paga::OperationOutcome::Success {
+if paga_rs::classify(Some(&body)) == paga_rs::OperationOutcome::Success {
     // settled
 }
 # Ok(())
@@ -226,7 +232,7 @@ reference number.
 ## Module layout
 
 The operations are split into one module per section of Paga's documentation,
-under `paga::operations`:
+under `paga_rs::operations`:
 
 | Module | Documentation section |
 |---|---|
@@ -243,7 +249,7 @@ under `paga::operations`:
 | `operations::persistent` | Persistent payment accounts |
 | `operations::customer` | Customer registration and KYC |
 
-`paga::client` holds the client struct and the HTTP plumbing; every module
+`paga_rs::client` holds the client struct and the HTTP plumbing; every module
 adds its operations as inherent methods on `PagaClient`, so the public API is
 one flat surface.
 

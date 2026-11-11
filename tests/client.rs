@@ -2,9 +2,9 @@
 
 mod support;
 
-use paga::auth::compute_hash;
-use paga::requests::*;
-use paga::{Environment, PagaClient, PagaClientOptions};
+use paga_rs::auth::compute_hash;
+use paga_rs::requests::*;
+use paga_rs::{Environment, PagaClient, PagaClientOptions};
 use support::MockServer;
 
 const PUBLIC_KEY: &str = "PUBLIC-KEY";
@@ -494,7 +494,7 @@ async fn an_authentication_failure_raises() {
     let result = client.get_banks("REF-1").await;
 
     let error = result.expect_err("a 401 must raise");
-    assert_eq!(error.kind, paga::PagaErrorKind::Authentication);
+    assert_eq!(error.kind, paga_rs::PagaErrorKind::Authentication);
 }
 
 #[tokio::test]

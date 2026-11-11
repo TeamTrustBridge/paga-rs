@@ -1,5 +1,5 @@
 [package]
-name = "paga"
+name = "paga-rs"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.70"
@@ -11,10 +11,6 @@ readme = "README.md"
 repository = "https://github.com/TeamTrustBridge/paga-rs"
 homepage = "https://github.com/TeamTrustBridge/paga-rs"
 documentation = "https://github.com/TeamTrustBridge/paga-rs#readme"
-
-[lib]
-name = "paga"
-path = "src/lib.rs"
 
 [dependencies]
 reqwest = { version = "0.12", default-features = false, features = ["json", "multipart", "rustls-tls"] }

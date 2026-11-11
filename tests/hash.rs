@@ -8,13 +8,13 @@ mod support;
 
 use std::fs;
 
-use paga::auth::{
+use paga_rs::auth::{
     compute_hash, verify_hash, AIRTIME_HASH_FIELDS, BILL_PAYMENT_HASH_FIELDS,
     CHARGE_CALLBACK_HASH_FIELDS, CHARGE_MANDATE_HASH_FIELDS, DISABLE_MANDATE_HASH_FIELDS,
     MANDATE_CALLBACK_HASH_FIELDS, MONEY_TRANSFER_HASH_FIELDS, PAYMENT_CALLBACK_HASH_FIELDS,
     PAYMENT_REQUEST_HASH_FIELDS, REFUND_HASH_FIELDS, SUBSIDIARY_OPERATION_HASH_FIELDS,
 };
-use paga::webhooks::{verify_charge_callback, verify_mandate_callback};
+use paga_rs::webhooks::{verify_charge_callback, verify_mandate_callback};
 use serde_json::Value;
 
 const HASH_KEY: &str = "hashkey123";
