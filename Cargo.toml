@@ -1,6 +1,6 @@
 [package]
 name = "paga-rs"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 rust-version = "1.70"
 description = "Unofficial async Rust SDK for the Paga Engine API - payments, payouts, wallets and financial operations."
