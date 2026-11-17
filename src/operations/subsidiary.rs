@@ -100,7 +100,8 @@ impl PagaClient {
             Some(&payload),
             RequestOptions::basic(SUBSIDIARY_RETRIEVE_HASH_FIELDS)
                 .base_url(self.base_url.clone())
-                .param("referenceNumber", reference_number),
+                .param("referenceNumber", reference_number)
+                .param("accountIdentifier", account_reference),
         )
         .await
     }
@@ -138,7 +139,8 @@ impl PagaClient {
             Some(&payload),
             RequestOptions::basic(SUBSIDIARY_BALANCE_HASH_FIELDS)
                 .base_url(self.base_url.clone())
-                .param("referenceNumber", reference_number),
+                .param("referenceNumber", reference_number)
+                .param("accountIdentifier", account_reference),
         )
         .await
     }
@@ -160,6 +162,7 @@ impl PagaClient {
             RequestOptions::basic(SUBSIDIARY_HISTORY_HASH_FIELDS)
                 .base_url(self.base_url.clone())
                 .param("referenceNumber", request.reference_number.clone())
+                .param("accountIdentifier", request.account_reference.clone())
                 .param("startDateTimeUTC", request.start_date_time_utc.clone())
                 .param("endDateTimeUTC", request.end_date_time_utc.clone())
                 .param("pageSize", request.page_size.unwrap_or(20).to_string())

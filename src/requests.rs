@@ -1,12 +1,14 @@
 /** Request types for the Paga Engine API operations.
  *
  * Every operation that has optional fields takes a request struct. The
- * required fields are set by `new`; the optional ones are public, so they
- * can be set with struct-update syntax:
+ * required fields are set by `new`; the optional ones are public fields, so
+ * they can be set directly on the struct:
  *
- * ```ignore
- * let request = CreatePayment::new("ORD-1", 50.0, "Bello", "0801234", "Payee")
- *     .payer_email("customer@example.com".to_string());
+ * ```
+ * use paga::CreatePayment;
+ *
+ * let mut request = CreatePayment::new("ORD-1", 50.0, "Bello", "0801234", "Payee");
+ * request.payer_email = Some("customer@example.com".to_string());
  * ```
  */
 
@@ -1374,6 +1376,12 @@ pub struct RegisterPersistentPaymentAccount {
     pub credit_bank_id: String,
     pub credit_bank_account_number: String,
     pub callback_url: String,
+    pub account_name: String,
+    pub first_name: String,
+    pub last_name: String,
+    pub phone_number: Option<String>,
+    pub email: Option<String>,
+    pub funding_transaction_limit: Option<f64>,
 }
 
 impl RegisterPersistentPaymentAccount {
@@ -1384,6 +1392,9 @@ impl RegisterPersistentPaymentAccount {
         credit_bank_id: impl Into<String>,
         credit_bank_account_number: impl Into<String>,
         callback_url: impl Into<String>,
+        account_name: impl Into<String>,
+        first_name: impl Into<String>,
+        last_name: impl Into<String>,
     ) -> Self {
         Self {
             reference_number: reference_number.into(),
@@ -1392,21 +1403,45 @@ impl RegisterPersistentPaymentAccount {
             credit_bank_id: credit_bank_id.into(),
             credit_bank_account_number: credit_bank_account_number.into(),
             callback_url: callback_url.into(),
+            account_name: account_name.into(),
+            first_name: first_name.into(),
+            last_name: last_name.into(),
+            ..Default::default()
         }
     }
 
     pub fn to_payload(&self) -> Value {
-        obj(vec![
-            ("referenceNumber", json!(self.reference_number)),
-            ("accountReference", json!(self.account_reference)),
-            (
-                "financialIdentificationNumber",
-                json!(self.financial_identification_number),
-            ),
-            ("creditBankId", json!(self.credit_bank_id)),
-            ("creditBankAccountNumber", json!(self.credit_bank_account_number)),
-            ("callbackUrl", json!(self.callback_url)),
-        ])
+        let mut payload = Map::new();
+        payload.insert("referenceNumber".into(), json!(self.reference_number));
+        payload.insert("accountReference".into(), json!(self.account_reference));
+        insert_opt(
+            &mut payload,
+            "financialIdentificationNumber",
+            Some(&self.financial_identification_number),
+        );
+        insert_opt(&mut payload, "creditBankId", Some(&self.credit_bank_id));
+        insert_opt(
+            &mut payload,
+            "creditBankAccountNumber",
+            Some(&self.credit_bank_account_number),
+        );
+        insert_opt(&mut payload, "callbackUrl", Some(&self.callback_url));
+        payload.insert("accountName".into(), json!(self.account_name));
+        payload.insert("firstName".into(), json!(self.first_name));
+        payload.insert("lastName".into(), json!(self.last_name));
+        if let Some(phone_number) = &self.phone_number {
+            payload.insert("phoneNumber".into(), json!(phone_number));
+        }
+        if let Some(email) = &self.email {
+            payload.insert("email".into(), json!(email));
+        }
+        if let Some(funding_transaction_limit) = self.funding_transaction_limit {
+            payload.insert(
+                "fundingTransactionLimit".into(),
+                json!(funding_transaction_limit),
+            );
+        }
+        Value::Object(payload)
     }
 }
 
@@ -1419,6 +1454,10 @@ pub struct UpdatePersistentPaymentAccount {
     pub credit_bank_id: Option<String>,
     pub credit_bank_account_number: Option<String>,
     pub callback_url: Option<String>,
+    pub account_name: Option<String>,
+    pub first_name: Option<String>,
+    pub last_name: Option<String>,
+    pub phone_number: Option<String>,
 }
 
 impl UpdatePersistentPaymentAccount {
@@ -1449,6 +1488,18 @@ impl UpdatePersistentPaymentAccount {
             self.credit_bank_account_number.as_deref(),
         );
         insert_opt(&mut payload, "callbackUrl", self.callback_url.as_deref());
+        if let Some(account_name) = &self.account_name {
+            payload.insert("accountName".into(), json!(account_name));
+        }
+        if let Some(first_name) = &self.first_name {
+            payload.insert("firstName".into(), json!(first_name));
+        }
+        if let Some(last_name) = &self.last_name {
+            payload.insert("lastName".into(), json!(last_name));
+        }
+        if let Some(phone_number) = &self.phone_number {
+            payload.insert("phoneNumber".into(), json!(phone_number));
+        }
         Value::Object(payload)
     }
 }

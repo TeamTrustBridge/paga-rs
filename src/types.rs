@@ -982,6 +982,14 @@ pub struct PersistentPaymentAccountResponse {
     #[serde(default)]
     pub callback_url: Option<String>,
     #[serde(default)]
+    pub account_name: Option<String>,
+    #[serde(default)]
+    pub phone_number: Option<String>,
+    #[serde(default)]
+    pub first_name: Option<String>,
+    #[serde(default)]
+    pub last_name: Option<String>,
+    #[serde(default)]
     pub status: Option<String>,
     #[serde(default)]
     pub balance: Option<f64>,

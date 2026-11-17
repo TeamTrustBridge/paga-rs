@@ -34,11 +34,15 @@ impl PagaClient {
         &self,
         reference_number: &str,
         account_identifier: &str,
+        reason: Option<&str>,
     ) -> Result<PagaResponse, PagaError> {
-        let payload = serde_json::json!({
+        let mut payload = serde_json::json!({
             "referenceNumber": reference_number,
             "accountIdentifier": account_identifier,
         });
+        if let Some(reason) = reason {
+            payload["reason"] = serde_json::json!(reason);
+        }
         self.request(
             Method::POST,
             "/deletePersistentPaymentAccount",

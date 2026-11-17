@@ -48,7 +48,7 @@ impl PagaClient {
             Method::POST,
             "/paymentRequest",
             Some(&payload),
-            RequestOptions::basic(PAYMENT_REQUEST_HASH_FIELDS),
+            RequestOptions::basic(PAYMENT_REQUEST_FULL_HASH_FIELDS),
         )
         .await
     }

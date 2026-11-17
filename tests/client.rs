@@ -240,6 +240,10 @@ async fn a_mandate_is_created_with_the_direct_debit_payment_method() {
             "currency",
             "payer.phoneNumber",
             "payer.email",
+            "payee.accountNumber",
+            "payee.phoneNumber",
+            "payee.bankId",
+            "payee.bankAccountNumber",
         ],
     );
     assert_eq!(request.header("hash"), Some(expected.as_str()));
@@ -447,6 +451,10 @@ async fn a_payment_request_signs_the_documented_fields() {
             "currency",
             "payer.phoneNumber",
             "payer.email",
+            "payee.accountNumber",
+            "payee.phoneNumber",
+            "payee.bankId",
+            "payee.bankAccountNumber",
         ],
     );
     assert_eq!(request.header("hash"), Some(expected.as_str()));
